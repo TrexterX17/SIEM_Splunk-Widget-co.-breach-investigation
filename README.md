@@ -18,7 +18,6 @@ A comprehensive cybersecurity forensic investigation using Splunk SIEM to analyz
 - [Technologies Used](#-technologies-used)
 - [Investigation Methodology](#-investigation-methodology)
 - [Recommendations](#-recommendations)
-- [Repository Structure](#-repository-structure)
 - [How to Use](#-how-to-use)
 - [Team](#-team)
 
