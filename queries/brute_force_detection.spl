@@ -1,41 +1,7 @@
-# Brute Force Attack Detection Query
-# Purpose: Identify rapid failed login attempts indicating password guessing
-# Target: WidgetApp logs
-# Threshold: 5+ failed attempts within 5-minute window
+-- Figure 3: Brute Force Login Attempts on WidgetApp
+-- Purpose: Detect repeated failed authentication attempts
 
-index=widget_co sourcetype=widgetapp action="failed_login"
-| bucket _time span=5m
-| stats 
-    count as failed_attempts,
-    dc(user) as unique_users_targeted,
-    values(user) as users
-    by _time, src_ip
-| where failed_attempts >= 5
-| eval attack_severity = case(
-    failed_attempts >= 20, "CRITICAL - Automated Attack",
-    failed_attempts >= 10, "HIGH - Sustained Attack",
-    failed_attempts >= 5, "MEDIUM - Possible Attack",
-    1=1, "LOW"
-  )
-| sort -failed_attempts
-| table _time, src_ip, failed_attempts, unique_users_targeted, users, attack_severity
-
-# Alternative: Per-user failed login analysis
-# index=widget_co sourcetype=widgetapp action="failed_login"
-# | stats 
-#     count as failed_count,
-#     dc(src_ip) as unique_ips,
-#     values(src_ip) as source_ips,
-#     earliest(_time) as first_attempt,
-#     latest(_time) as last_attempt
-#     by user
-# | where failed_count > 5
-# | convert ctime(first_attempt) ctime(last_attempt)
-# | sort -failed_count
-
-# Correlation: Failed logins followed by successful login
-# index=widget_co sourcetype=widgetapp
-# | transaction user src_ip maxspan=15m
-# | search action="failed_login" AND action="success"
-# | stats count by user, src_ip
-# | where count > 3
+index=final_project sourcetype=widgetapp user=BDRVLS
+| search status="failed"
+| stats count by src_ip user
+| where count > 5
