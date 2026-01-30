@@ -1,0 +1,83 @@
+# Widget Co. Breach Investigation - .gitignore
+
+# Sensitive Data Files
+*.csv
+*.log
+*.pcap
+raw_logs/
+original_data/
+sensitive/
+
+# Splunk Exports
+*.gz
+*.tar
+splunk_exports/
+
+# Private Keys & Credentials
+*.key
+*.pem
+credentials/
+secrets/
+
+# Investigation Notes (if containing PII)
+*_confidential.md
+*_classified.md
+personal_notes/
+
+# Temporary Files
+*.tmp
+*.temp
+*.swp
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE Files
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Documentation Build
+_build/
+docs/_build/
+
+# Backup Files
+*.bak
+*.backup
+backups/
+
+# Large Files (should use Git LFS)
+*.zip
+*.rar
+*.7z
+*.iso
+
+# Reports (if containing sensitive client info)
+# Uncomment if needed:
+# reports/confidential/
+# client_specific/
+
+# Screenshots with PII
+# screenshots/raw/
+
+# Keep these directories but ignore contents
+evidence/raw_data/.gitkeep
+!evidence/raw_data/.gitkeep

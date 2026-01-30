@@ -1,0 +1,33 @@
+# MFA Bypass Analysis Query
+# Purpose: Detect repeated MFA bypass attempts indicating exploitation
+# Target: MFA logs
+# Threshold: 3+ bypasses from same IP or for same user
+
+index=widget_co sourcetype=mfa action="bypass"
+| stats 
+    count as bypass_count,
+    dc(app) as apps_targeted,
+    values(app) as applications,
+    earliest(_time) as first_bypass,
+    latest(_time) as last_bypass
+    by user, src_ip
+| where bypass_count > 1
+| eval 
+    severity = case(
+        bypass_count >= 5, "CRITICAL",
+        bypass_count >= 3, "HIGH",
+        bypass_count >= 2, "MEDIUM",
+        1=1, "LOW"
+    ),
+    time_window = last_bypass - first_bypass,
+    bypasses_per_hour = round((bypass_count / (time_window / 3600)), 2)
+| convert ctime(first_bypass) ctime(last_bypass)
+| table user, src_ip, bypass_count, apps_targeted, applications, first_bypass, last_bypass, bypasses_per_hour, severity
+| sort -bypass_count
+
+# Enhanced query: Correlate with successful logins after bypass
+# index=widget_co sourcetype=mfa
+# | eval event_type = if(action="bypass", "bypass", if(action="success", "success", "other"))
+# | transaction user src_ip maxspan=1h
+# | search event_type="bypass" AND event_type="success"
+# | table _time, user, src_ip, app, eventcount

@@ -1,0 +1,29 @@
+# Phishing Detection Query
+# Purpose: Identify users who accessed known malicious domains
+# Target: DNS logs
+# IOCs: glasslu.com and subdomains
+
+index=widget_co sourcetype=dns
+| search query IN ("glasslu.com", "*.glasslu.com", "www.aeon.jp.co.glasslu.com")
+| stats 
+    count as access_count,
+    earliest(_time) as first_access,
+    latest(_time) as last_access,
+    values(src_ip) as source_ips
+    by user, query
+| eval access_window = last_access - first_access
+| convert ctime(first_access) ctime(last_access)
+| eval risk_level = case(
+    access_count > 5, "CRITICAL",
+    access_count > 2, "HIGH",
+    1=1, "MEDIUM"
+  )
+| table user, query, access_count, first_access, last_access, source_ips, risk_level
+| sort -access_count
+
+# Alternative: Extract domain pattern for broader detection
+# index=widget_co sourcetype=dns
+# | rex field=query "(?<base_domain>[^.]+\.[^.]+)$"
+# | search base_domain="glasslu.com"
+# | stats count by user, query, src_ip
+# | sort -count

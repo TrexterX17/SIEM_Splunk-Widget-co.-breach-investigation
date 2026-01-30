@@ -1,0 +1,266 @@
+<dashboard version="1.1">
+  <label>Widget Co. - Breach Correlation Dashboard</label>
+  <description>Centralized view of all breach-related events and IOCs</description>
+  
+  <!-- Row 1: Overview Statistics -->
+  <row>
+    <panel>
+      <title>Total Affected Users</title>
+      <single>
+        <search>
+          <query>
+            index=widget_co (user="BDRVLS" OR user="DDDXUB" OR user="TIIYAW")
+            | stats dc(user) as affected_users
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x65A637","0x6DB7C6","0xF7BC38","0xF58F39","0xD93F3C"]</option>
+        <option name="rangeValues">[0,30,70,100]</option>
+        <option name="underLabel">Compromised Accounts</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    
+    <panel>
+      <title>Total Malicious Events</title>
+      <single>
+        <search>
+          <query>
+            index=widget_co (query="*.glasslu.com" OR src_ip="180.76.54.93" OR action="bypass")
+            | stats count as total_events
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">IOC Matches</option>
+      </single>
+    </panel>
+    
+    <panel>
+      <title>Attack Duration</title>
+      <single>
+        <search>
+          <query>
+            index=widget_co (user="BDRVLS" OR user="DDDXUB" OR src_ip="180.76.54.93")
+            | stats earliest(_time) as start, latest(_time) as end
+            | eval duration_days = round((end - start) / 86400, 0)
+            | fields duration_days
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">Days Active</option>
+      </single>
+    </panel>
+    
+    <panel>
+      <title>Systems Compromised</title>
+      <single>
+        <search>
+          <query>
+            index=widget_co (user="BDRVLS" OR user="DDDXUB") src_ip="180.76.54.93"
+            | stats dc(sourcetype) as systems
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="underLabel">Affected Systems</option>
+      </single>
+    </panel>
+  </row>
+  
+  <!-- Row 2: Attack Timeline -->
+  <row>
+    <panel>
+      <title>Attack Timeline - Events Over Time</title>
+      <chart>
+        <search>
+          <query>
+            index=widget_co (user="BDRVLS" OR user="DDDXUB" OR src_ip="180.76.54.93")
+            | eval event_type = case(
+                sourcetype="dns" AND query="*.glasslu.com", "Phishing",
+                sourcetype="mfa" AND action="bypass", "MFA Bypass",
+                action="failed_login", "Brute Force",
+                sourcetype="password_vault", "Vault Access",
+                sourcetype="cloud" OR sourcetype="it_admin", "Privilege Escalation",
+                1=1, "Other"
+              )
+            | timechart span=1d count by event_type
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleX.text">Date</option>
+        <option name="charting.axisTitleY.text">Event Count</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">all</option>
+      </chart>
+    </panel>
+  </row>
+  
+  <!-- Row 3: User Activity Breakdown -->
+  <row>
+    <panel>
+      <title>Activity by Affected User</title>
+      <table>
+        <search>
+          <query>
+            index=widget_co user IN ("BDRVLS", "DDDXUB", "TIIYAW")
+            | stats 
+                count as total_events,
+                dc(src_ip) as unique_ips,
+                values(src_ip) as ip_addresses,
+                dc(sourcetype) as systems_accessed,
+                values(sourcetype) as systems,
+                earliest(_time) as first_activity,
+                latest(_time) as last_activity
+                by user
+            | eval activity_window = tostring(last_activity - first_activity, "duration")
+            | convert ctime(first_activity) ctime(last_activity)
+            | table user, total_events, unique_ips, ip_addresses, systems_accessed, systems, first_activity, last_activity, activity_window
+            | sort -total_events
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+      </table>
+    </panel>
+  </row>
+  
+  <!-- Row 4: Malicious IP Activity -->
+  <row>
+    <panel>
+      <title>Attacker IP (180.76.54.93) Activity</title>
+      <table>
+        <search>
+          <query>
+            index=widget_co src_ip="180.76.54.93"
+            | stats 
+                count as event_count,
+                dc(user) as users_targeted,
+                values(user) as usernames,
+                dc(sourcetype) as systems,
+                values(sourcetype) as system_list,
+                values(action) as actions
+                by _time
+            | convert ctime(_time)
+            | sort -_time
+            | head 50
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+        <option name="count">20</option>
+      </table>
+    </panel>
+  </row>
+  
+  <!-- Row 5: Phishing Domain Queries -->
+  <row>
+    <panel>
+      <title>Malicious Domain Access (glasslu.com)</title>
+      <table>
+        <search>
+          <query>
+            index=widget_co sourcetype=dns query="*.glasslu.com"
+            | stats 
+                count as access_count,
+                earliest(_time) as first_access,
+                latest(_time) as last_access,
+                values(src_ip) as source_ips
+                by user, query
+            | convert ctime(first_access) ctime(last_access)
+            | eval risk_level = case(
+                access_count > 5, "CRITICAL",
+                access_count > 2, "HIGH",
+                1=1, "MEDIUM"
+              )
+            | table user, query, access_count, first_access, last_access, source_ips, risk_level
+            | sort -access_count
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  
+  <!-- Row 6: MFA Bypass Events -->
+  <row>
+    <panel>
+      <title>MFA Bypass Attempts</title>
+      <chart>
+        <search>
+          <query>
+            index=widget_co sourcetype=mfa action="bypass"
+            | stats count by user, src_ip, app
+            | sort -count
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">all</option>
+      </chart>
+    </panel>
+    
+    <panel>
+      <title>MFA Bypass Details</title>
+      <table>
+        <search>
+          <query>
+            index=widget_co sourcetype=mfa action="bypass"
+            | table _time, user, src_ip, app, action
+            | convert ctime(_time)
+            | sort _time
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+  
+  <!-- Row 7: Geographic Distribution -->
+  <row>
+    <panel>
+      <title>Authentication Geographic Distribution</title>
+      <map>
+        <search>
+          <query>
+            index=widget_co action IN ("login", "auth")
+            | iplocation src_ip
+            | geostats latfield=lat longfield=lon count by Country
+          </query>
+          <earliest>2022-10-01T00:00:00</earliest>
+          <latest>2022-10-31T23:59:59</latest>
+        </search>
+        <option name="mapping.type">marker</option>
+        <option name="mapping.drilldown">all</option>
+        <option name="mapping.markerSize">5</option>
+      </map>
+    </panel>
+  </row>
+  
+</dashboard>

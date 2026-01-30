@@ -1,0 +1,103 @@
+# Privilege Escalation Detection Query
+# Purpose: Track lateral movement and unauthorized privileged access
+# Target: Cloud Portal and IT Admin Portal logs
+# Focus: Account DDDXUB and suspicious progression patterns
+
+# Query 1: DDDXUB Account Activity Timeline
+index=widget_co user="DDDXUB" (sourcetype=cloud OR sourcetype=it_admin)
+| eval 
+    system_tier = case(
+        sourcetype="it_admin", "Tier 1 - IT Administration",
+        sourcetype="cloud", "Tier 2 - Cloud Infrastructure",
+        1=1, "Other"
+    ),
+    action_type = case(
+        action="login", "Authentication",
+        action="config_change", "Configuration",
+        action="user_add", "User Management",
+        action="permission_change", "Access Control",
+        1=1, action
+    )
+| table _time, user, src_ip, sourcetype, system_tier, action, action_type
+| sort _time
+
+# Query 2: Lateral Movement Detection (System Progression)
+index=widget_co user="DDDXUB"
+| eval privilege_level = case(
+    sourcetype IN ("email", "productivity"), 1,
+    sourcetype="widgetapp", 2,
+    sourcetype="password_vault", 3,
+    sourcetype="cloud", 4,
+    sourcetype="it_admin", 5,
+    1=1, 0
+  )
+| sort _time
+| streamstats current=f last(privilege_level) as prev_level by user
+| eval escalation = if(privilege_level > prev_level, "YES", "NO")
+| where escalation="YES"
+| table _time, user, src_ip, sourcetype, prev_level, privilege_level, escalation
+| eval alert = "CRITICAL - Privilege escalation detected"
+
+# Query 3: Compromised Credential Usage Pattern
+index=widget_co user="DDDXUB"
+| stats 
+    count as total_actions,
+    dc(sourcetype) as systems_accessed,
+    values(sourcetype) as systems_list,
+    dc(src_ip) as unique_ips,
+    values(src_ip) as ip_list,
+    earliest(_time) as first_seen,
+    latest(_time) as last_seen
+    by user
+| eval 
+    time_window_hours = round((last_seen - first_seen) / 3600, 2),
+    actions_per_hour = round(total_actions / time_window_hours, 2),
+    anomaly_score = (systems_accessed * 3) + (unique_ips * 2)
+| convert ctime(first_seen) ctime(last_seen)
+| eval verdict = case(
+    anomaly_score > 15, "CRITICAL - Likely compromised account",
+    anomaly_score > 10, "HIGH - Suspicious activity",
+    anomaly_score > 5, "MEDIUM - Monitor closely",
+    1=1, "NORMAL"
+  )
+| table user, total_actions, systems_accessed, systems_list, unique_ips, ip_list, first_seen, last_seen, time_window_hours, anomaly_score, verdict
+
+# Query 4: Cross-Account Correlation (BDRVLS → DDDXUB)
+index=widget_co (user="BDRVLS" OR user="DDDXUB")
+| eval event_category = case(
+    sourcetype="dns" AND query="*.glasslu.com", "Initial Phishing",
+    sourcetype="mfa" AND action="bypass", "MFA Compromise",
+    sourcetype="password_vault", "Credential Theft",
+    sourcetype IN ("cloud", "it_admin"), "Privileged Access",
+    1=1, "Other"
+  )
+| table _time, user, event_category, sourcetype, action, src_ip
+| sort _time
+
+# Query 5: Administrative Actions by Compromised Account
+index=widget_co user="DDDXUB" (sourcetype=cloud OR sourcetype=it_admin)
+| search action IN ("config_change", "user_add", "permission_change", "access_grant", "policy_modify")
+| eval impact = case(
+    action IN ("user_add", "permission_change", "access_grant"), "HIGH - Access Control Modified",
+    action IN ("config_change", "policy_modify"), "MEDIUM - Configuration Changed",
+    1=1, "LOW"
+  )
+| table _time, user, src_ip, sourcetype, action, impact
+| sort _time
+
+# Query 6: Privilege Escalation Kill Chain
+index=widget_co
+| eval stage = case(
+    sourcetype="dns" AND query="*.glasslu.com", "1-Phishing",
+    sourcetype="mfa" AND action="bypass", "2-MFA Bypass",
+    sourcetype="widgetapp" AND action="failed_login", "3-Brute Force",
+    sourcetype="password_vault" AND action="login", "4-Credential Theft",
+    sourcetype="cloud", "5-Lateral Movement",
+    sourcetype="it_admin", "6-Privilege Escalation",
+    1=1, "0-Other"
+  )
+| where stage!="0-Other"
+| stats earliest(_time) as first_occurrence by stage, user
+| sort stage
+| convert ctime(first_occurrence)
+| table stage, user, first_occurrence
