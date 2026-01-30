@@ -1,69 +1,7 @@
-# Password Vault Access Audit Query
-# Purpose: Monitor unauthorized access to credential storage
-# Target: Password Vault logs
-# Focus: Suspicious IPs and unusual access patterns
+-- Figure 4: Successful Password Vault Authentication
+-- Purpose: Confirm attacker access due to lack of MFA
 
-# Query 1: Identify access from known malicious IPs
-index=widget_co sourcetype=password_vault
-| search src_ip="180.76.54.93"
-| eval credential_exposure = "HIGH RISK - Attacker IP"
-| table _time, user, src_ip, action, credential_id, credential_exposure
+index=final_project sourcetype=password_vault user=BDRVLS
+| search status="success"
+| table _time user src_ip action
 | sort _time
-
-# Query 2: Detect unusual vault access patterns
-index=widget_co sourcetype=password_vault action="login"
-| stats 
-    count as access_count,
-    dc(credential_id) as credentials_accessed,
-    values(credential_id) as credential_list,
-    earliest(_time) as first_access,
-    latest(_time) as last_access
-    by user, src_ip
-| eval 
-    risk_score = (credentials_accessed * 2) + (access_count * 1),
-    severity = case(
-        risk_score > 20, "CRITICAL",
-        risk_score > 10, "HIGH",
-        risk_score > 5, "MEDIUM",
-        1=1, "LOW"
-    )
-| where risk_score > 5
-| convert ctime(first_access) ctime(last_access)
-| table user, src_ip, access_count, credentials_accessed, credential_list, first_access, last_access, risk_score, severity
-| sort -risk_score
-
-# Query 3: After-hours vault access (business hours: 8 AM - 6 PM)
-index=widget_co sourcetype=password_vault action IN ("login", "view", "retrieve")
-| eval hour = tonumber(strftime(_time, "%H"))
-| where hour < 8 OR hour > 18
-| eval time_category = case(
-    hour >= 0 AND hour < 6, "Late Night (12 AM - 6 AM)",
-    hour >= 6 AND hour < 8, "Early Morning (6 AM - 8 AM)",
-    hour >= 18 AND hour < 22, "Evening (6 PM - 10 PM)",
-    hour >= 22, "Late Evening (10 PM - 12 AM)"
-  )
-| table _time, user, src_ip, action, credential_id, hour, time_category
-| sort _time
-
-# Query 4: Bulk credential retrieval detection
-index=widget_co sourcetype=password_vault action="retrieve"
-| bucket _time span=10m
-| stats count as retrieval_count, values(credential_id) as credentials by _time, user, src_ip
-| where retrieval_count > 3
-| eval alert = "CRITICAL - Possible credential harvesting"
-| table _time, user, src_ip, retrieval_count, credentials, alert
-| sort -retrieval_count
-
-# Query 5: Correlation with other suspicious activity
-index=widget_co (sourcetype=password_vault OR sourcetype=mfa OR sourcetype=dns)
-| eval activity_type = case(
-    sourcetype="password_vault", "Vault Access",
-    sourcetype="mfa" AND action="bypass", "MFA Bypass",
-    sourcetype="dns" AND query="*.glasslu.com", "Phishing Domain",
-    1=1, "Other"
-  )
-| search activity_type IN ("Vault Access", "MFA Bypass", "Phishing Domain")
-| stats values(activity_type) as activities by user, src_ip
-| where mvcount(activities) > 1
-| eval threat_level = "HIGH - Multiple IOC correlation"
-| table user, src_ip, activities, threat_level
