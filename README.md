@@ -278,47 +278,6 @@ Focused on identifying:
 
 ---
 
-## 🚀 How to Use
-
-### Prerequisites
-- Splunk Enterprise 9.0+ or Splunk Cloud
-- Access to log data sources (CSV format)
-- Basic knowledge of SPL (Splunk Processing Language)
-
-### Setup Instructions
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/yourusername/widget-co-breach-investigation.git
-   cd widget-co-breach-investigation
-   ```
-
-2. **Import Data into Splunk**
-   ```bash
-   # Upload CSV files to Splunk
-   # Configure source types: dns, mfa, vpn, widgetapp, password_vault, cloud, it_admin
-   ```
-
-3. **Install Dashboards**
-   ```bash
-   # Navigate to Splunk Web → Dashboards → Create New Dashboard
-   # Import XML files from /dashboards directory
-   ```
-
-4. **Run Investigation Queries**
-   ```bash
-   # Open Splunk Search & Reporting
-   # Copy queries from /queries directory
-   # Adjust index and source type names as needed
-   ```
-
-5. **Review Evidence**
-   - Read `/evidence/timeline.md` for attack sequence
-   - Check `/evidence/iocs.md` for threat indicators
-   - Review `/docs` for detailed analysis
-
----
-
 ## 🤝 Contributing
 
 This is a completed academic project. However, feedback and suggestions are welcome! Feel free to open an issue or submit a pull request.
